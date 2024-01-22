@@ -3,27 +3,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub(crate) enum OptionInputConversionError {
-    #[error("No primary action found")]
-    MissingPrimaryAction,
-    #[error("Multiple primary actions found")]
-    MultiplePrimaryAction,
-    #[error("No file found")]
-    MissingFile,
-    #[error("No file type found")]
-    MissingFileType,
-    #[error("Multiple file types found")]
-    MultipleFileTypes,
-    #[error("No sync direction found")]
-    MissingSyncDirection,
-    #[error("Multiple sync directions found")]
-    MultipleSyncDirections,
-}
-
-#[derive(Error, Debug)]
 pub(crate) enum ApplicationError {
-    #[error("'{0}' not found")]
-    ConfigFileMissing(PathBuf),
     #[error("Unable to read config file: '{0}'")]
     ConfigFileReadError(PathBuf),
     #[error("File not found: '{0}'")]
@@ -31,7 +11,11 @@ pub(crate) enum ApplicationError {
     #[error("File is not a dotfile, but is a symlink: '{0}'")]
     UntrackedSymlinkedFile(PathBuf),
     #[error("Unable to move/rename file '{from}' to '{to}'")]
-    FailedRenamingFile { err: std::io::Error, from: PathBuf, to: PathBuf },
+    FailedRenamingFile {
+        err: std::io::Error,
+        from: PathBuf,
+        to: PathBuf,
+    },
     #[error("Root cannot contain configuration files: '{0}'")]
     FileInRoot(PathBuf),
     #[error("Could not open file for edit: '{0}'")]
@@ -42,4 +26,6 @@ pub(crate) enum ApplicationError {
     PathConversionError(PathBuf),
     #[error("Failed reading file '{0}'")]
     ErrorReadingFile(PathBuf),
+    #[error("Could not create directories leading to path: '{0}'")]
+    CouldNotCreateDirectories(PathBuf, std::io::Error),
 }

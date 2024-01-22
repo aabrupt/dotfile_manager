@@ -24,7 +24,7 @@ pub(crate) struct Cli {
 #[clap(group(ArgGroup::new("file_action").args(["add", "remove"]).requires_all(["file_type", "file"])))]
 pub(crate) struct PrimaryActionGroup {
     /// Sync files between your computer or dotfiles source, '-k' is the private key which you have locked your secret file with
-    #[clap(short = 'S', long, requires_all = ["sync_direction", "secret_key"])]
+    #[clap(short = 'S', long, requires = "sync_direction")]
     pub(crate) sync: bool,
     /// Add a file to the dotfiles source control, <--secret|--config> define which type of file is
     /// added
