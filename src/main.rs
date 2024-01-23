@@ -317,9 +317,11 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                     .map_err(|err| {
                         ApplicationError::CouldNotOpenFile(cfg_file_path.clone(), err)
                     })?;
-                cfg_file.write(abs_path_str.as_bytes()).map_err(|err| {
-                    ApplicationError::FailedWritingToFile(cfg_file_path.clone(), err)
-                })?;
+                cfg_file
+                    .write(format!("{}\n", abs_path_str).as_bytes())
+                    .map_err(|err| {
+                        ApplicationError::FailedWritingToFile(cfg_file_path.clone(), err)
+                    })?;
                 println!(
                     "'{}' has been added to '{}'",
                     abs_path_str,
