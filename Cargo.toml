@@ -6,7 +6,10 @@ edition = "2021"
 [dependencies]
 assert_cmd = "2.0.13"
 clap = { version = "4.4.16", features = ["derive"] }
+configparser = "3.0.4"
 dotenv = "0.15.0"
 pgp = "0.10.2"
+rand = "0.8.5"
 rpassword = "7.3.1"
+shellexpand = "3.1.0"
 thiserror = "1.0.56"

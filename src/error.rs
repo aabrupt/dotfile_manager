@@ -18,7 +18,7 @@ pub(crate) enum ApplicationError {
     },
     #[error("Root cannot contain configuration files: '{0}'")]
     FileInRoot(PathBuf),
-    #[error("Could not open file for edit: '{0}'")]
+    #[error("Could not open file '{0}' error '{1}'")]
     CouldNotOpenFile(PathBuf, std::io::Error),
     #[error("An error occured while writing to file '{0}'")]
     FailedWritingToFile(PathBuf, std::io::Error),
@@ -28,4 +28,36 @@ pub(crate) enum ApplicationError {
     ErrorReadingFile(PathBuf),
     #[error("Could not create directories leading to path: '{0}'")]
     CouldNotCreateDirectories(PathBuf, std::io::Error),
+    #[error("Secret key is required")]
+    SecretKeyRequired,
+    #[error("Failed signing key '{0}'")]
+    PGPKeySignError(PathBuf),
+    #[error("Password is required")]
+    PasswordRequired,
+    #[error("Plain key generation failed with error '{0}'")]
+    KeyGenerationFailed(pgp::errors::Error),
+    #[error("An error has occured while expanding variables within a string '{0}'")]
+    ErrorExpandingVariable(shellexpand::LookupError<std::env::VarError>),
+    #[error("File input is required for the program to function")]
+    FileInputRequired,
+    #[error("$HOME is not defined")]
+    UndedfinedHomeVariable,
+    #[error("An error has occured while encrypting content of '{0}': '{1}'")]
+    FailedEncryptingContent(PathBuf, pgp::errors::Error),
+    #[error("An error has occured while reading you pgp key: {0}")]
+    FailedReadingKey(PathBuf, pgp::errors::Error),
+    #[error("Error reading '{0}' containing pgp message to be encrypted: {1}")]
+    PGPMessageReadError(PathBuf, pgp::errors::Error),
+    #[error("An error has occured while writing information to '{0}': {1}")]
+    PGPWriterError(PathBuf, pgp::errors::Error),
+    #[error("Error while decrypting content of '{0}': incorrect key")]
+    FailedDecryptingContent(PathBuf),
+    #[error("Error reading message in decryptor: {0}")]
+    FailedDecryptingMessageInContent(pgp::errors::Error),
+    #[error("Error has occured while reading content within decrypted message: {0}")]
+    ErrorReadingContentInMessage(pgp::errors::Error),
+    #[error("Empty content within decrypted message")]
+    NoContentInPGPMessage,
+    #[error("Content within decrypted message is not UTF8 encoded")]
+    MessageNotUTF8Encoded,
 }

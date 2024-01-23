@@ -35,7 +35,7 @@ pub(crate) struct PrimaryActionGroup {
     #[clap(short = 'R', long)]
     pub(crate) remove: bool,
     /// Create a new private key to encrypt your secrets. '-k' is the new location and name of the key.
-    #[clap(short = 'K', long, requires = "secret_key")]
+    #[clap(short = 'K', long)]
     pub(crate) create_key: bool,
 }
 
