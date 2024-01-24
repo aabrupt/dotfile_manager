@@ -44,7 +44,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         break;
     }
 
-    let dotfiles_dir = match config.get("system", "source_control_folder") {
+    let dotfiles_dir = match config.get("options", "source_control_folder") {
         Some(dotfiles_dir) => PathBuf::from(
             shellexpand::full(&dotfiles_dir)
                 .map_err(|err| ApplicationError::ErrorExpandingVariable(err))?
@@ -445,7 +445,7 @@ fn dotfile_path<'a>(
 fn key_or_cfg(key: &Option<PathBuf>, config: Ini) -> Result<PathBuf, ApplicationError> {
     match key {
         Some(key) => Ok(key.clone()),
-        None => match config.get("system", "secret_key") {
+        None => match config.get("options", "secret_key") {
             Some(config_key) => Ok(PathBuf::from(
                 shellexpand::full(&config_key)
                     .map_err(|err| ApplicationError::ErrorExpandingVariable(err))?
