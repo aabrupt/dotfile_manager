@@ -1,0 +1,3 @@
+#!/bin/sh
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+sudo docker buildx build -t dotfile_manager/test $SCRIPT_DIR/.. && sudo docker run -it --rm dotfile_manager/test

@@ -474,3 +474,101 @@ fn expand_variables_in_path(file: &PathBuf) -> Result<PathBuf, ApplicationError>
     )
     .map_err(|_| ApplicationError::PathConversionError(file.clone()))?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn static_symlinc_dir<'a>(home: &'a str) -> PathBuf {
+        [home.into(), ".dotfiles", "symlinks"].iter().collect()
+    }
+
+    #[test]
+    fn test_dotfile_in_home() {
+        let home = std::env::var("HOME").unwrap();
+        let dotfile_path = dotfile_path(
+            static_symlinc_dir(&home),
+            &[&home, ".dotfile"].iter().collect(),
+        )
+        .unwrap();
+        assert_eq!(
+            dotfile_path,
+            [&home, ".dotfiles", "symlinks", ".dotfile"]
+                .iter()
+                .collect::<PathBuf>()
+        );
+    }
+    #[test]
+    fn test_dotfile_folder() {
+        let home = std::env::var("HOME").unwrap();
+        let dotfile_path = dotfile_path(
+            static_symlinc_dir(&home),
+            &[&home, ".config", "dotfolder"].iter().collect()
+        )
+        .unwrap();
+        assert_eq!(
+            dotfile_path,
+            [&home, ".dotfiles", "symlinks", "dotfolder"]
+                .iter()
+                .collect::<PathBuf>()
+        );
+    }
+    #[test]
+    fn test_dotfile_outside_home() {
+        let home = std::env::var("HOME").unwrap();
+        let dotfile_path = dotfile_path(
+            static_symlinc_dir(&home),
+            &[&home, ".config", "dotfile"].iter().collect()
+        )
+        .unwrap();
+        assert_eq!(
+            dotfile_path,
+            [&home, ".dotfiles", "symlinks", ".config", "dotfile"]
+                .iter()
+                .collect::<PathBuf>()
+        );
+    }
+    #[test]
+    fn test_bkp_file() {
+        let file = ["file.txt"].iter().collect::<PathBuf>();
+        let bkp_file = bkp_file(&file).unwrap();
+
+        assert_ne!(file, bkp_file);
+    }
+    #[test]
+    fn test_expand_tilde() {
+        let home = std::env::var("HOME").unwrap();
+        let path = PathBuf::from("~");
+        let expanded = expand_variables_in_path(&path).unwrap();
+        assert_eq!(expanded, PathBuf::from(home));
+    }
+    #[test]
+    fn test_expand_variable() {
+        let home = std::env::var("HOME").unwrap();
+        let path = PathBuf::from("$HOME");
+        let expanded = expand_variables_in_path(&path).unwrap();
+        assert_eq!(expanded, PathBuf::from(home));
+    }
+    #[test]
+    #[should_panic]
+    fn test_no_key() {
+        let config = Ini::new();
+
+        key_or_cfg(&None, config).unwrap();
+    }
+    #[test]
+    fn test_input_key() {
+        let config = Ini::new();
+
+        let input_key = key_or_cfg(&Some(PathBuf::from("key")), config).unwrap();
+        assert_eq!(input_key, PathBuf::from("key"));
+    }
+    #[test]
+    fn test_cfg_key() {
+        let mut config = Ini::new();
+        config.set("options", "secret_key", Some("~".to_string()));
+
+        let input_key = key_or_cfg(&None, config).unwrap();
+        assert_eq!(input_key, PathBuf::from(std::env::var("HOME").unwrap()));
+    }
+}
