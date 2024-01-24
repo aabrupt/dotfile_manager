@@ -289,6 +289,10 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
             let abs_path_str = abs_path
                 .to_str()
                 .ok_or(ApplicationError::PathConversionError(abs_path.clone()))?;
+            let cfg_file_parent = cfg_file_path.parent().ok_or(ApplicationError::FileInRoot(cfg_file_path.clone()))?;
+            if cfg_file_parent.exists() {
+                fs::create_dir_all(cfg_file_parent).map_err(|err| ApplicationError::CouldNotCreateDirectories(cfg_file_parent.to_path_buf(), err))?;
+            }
             {
                 let cfg_file = OpenOptions::new()
                     .create(true)
@@ -430,7 +434,7 @@ fn dotfile_path<'a>(
     let parent_name = parent
         .file_name()
         .ok_or(ApplicationError::FileNotFound(parent.to_path_buf()))?;
-    if PathBuf::from(std::env::var("HOME").unwrap()) != parent || !file.is_dir() {
+    if &PathBuf::from(std::env::var("HOME").unwrap()) != parent && !file.is_dir() {
         base_directory.push(parent_name);
     }
     fs::create_dir_all(&base_directory)
