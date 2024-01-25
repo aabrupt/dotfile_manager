@@ -1,53 +1,24 @@
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Args, Parser};
+use clap::{Args, Parser, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[clap(name = "Dotfile Manager")]
 pub(crate) struct Cli {
-    #[clap(flatten)]
-    pub(crate) primary_action: PrimaryActionGroup,
-    #[clap(flatten)]
-    pub(crate) sync_direction: SyncDirectionGroup,
-    #[clap(flatten)]
-    pub(crate) file_type: FileTypeGroup,
+    /// The primary action for the application
+    pub(crate) primary_action: PrimaryAction,
+    /// Sync to specified location
+    #[clap(short='D', long, required=false, required_if_eq("primary_action", "sync"))]
+    pub(crate) sync_direction: SyncDirection,
+    /// File type to be added into tracked files
+    #[clap(short='F', long, required=false, required_if_eq_any=[("primary_action", "add"), ("primary_action", "remove")])]
+    pub(crate) file_type: FileType,
     /// File input, used to define a file to be added or removed from dotfiles
-    #[clap(short='f', long, requires_all=["file_type", "file_action"])]
+    #[clap(short = 'f', long, requires = "file_type", required_if_eq_any=[("primary_action", "add"), ("primary_action", "remove")])]
     pub(crate) file: Option<PathBuf>,
     /// PGP key which has different use cases depending on the function
     #[clap(short = 'k', long = "secret-key")]
     pub(crate) secret_key: Option<PathBuf>,
-}
-
-#[derive(Debug, Args)]
-#[group(required = true, multiple = false, id = "primary_action")]
-#[clap(group(ArgGroup::new("file_action").args(["add", "remove"]).requires_all(["file_type", "file"])))]
-pub(crate) struct PrimaryActionGroup {
-    /// Sync files between your computer or dotfiles source, '-k' is the private key which you have locked your secret file with
-    #[clap(short = 'S', long, requires = "sync_direction")]
-    pub(crate) sync: bool,
-    /// Add a file to the dotfiles source control, <--secret|--config> define which type of file is
-    /// added
-    #[clap(short = 'A', long)]
-    pub(crate) add: bool,
-    /// Remove a file from the dotfiles source control, <--secret|--config> define which type of file is
-    /// removed
-    #[clap(short = 'R', long)]
-    pub(crate) remove: bool,
-    /// Create a new private key to encrypt your secrets. '-k' is the new location and name of the key.
-    #[clap(short = 'K', long)]
-    pub(crate) create_key: bool,
-}
-
-#[derive(Debug, Args)]
-#[group(requires = "sync", multiple = false, id = "sync_direction")]
-pub(crate) struct SyncDirectionGroup {
-    /// Sync from the filesystem, updating the files within the dotfiles source control.
-    #[clap(short = 'F', long)]
-    pub(crate) from_filesystem: bool,
-    /// Sync from the dotfiles, updating the machine configuration.
-    #[clap(short = 'D', long)]
-    pub(crate) from_dotfiles: bool,
 }
 
 #[derive(Debug, Args)]
@@ -61,6 +32,7 @@ pub(crate) struct FileTypeGroup {
     pub(crate) config: bool,
 }
 
+#[derive(Debug, ValueEnum, Clone)]
 pub(crate) enum PrimaryAction {
     Sync,
     Add,
@@ -68,52 +40,14 @@ pub(crate) enum PrimaryAction {
     CreateKey,
 }
 
-impl From<&PrimaryActionGroup> for PrimaryAction {
-    fn from(value: &PrimaryActionGroup) -> Self {
-        if value.sync {
-            return Self::Sync;
-        } else if value.create_key {
-            return Self::CreateKey;
-        } else if value.add {
-            return Self::Add;
-        } else if value.remove {
-            return Self::Remove;
-        } else {
-            unreachable!();
-        }
-    }
-}
-
+#[derive(Debug, ValueEnum, Clone)]
 pub(crate) enum SyncDirection {
-    FromFilesystem,
-    FromDotfiles,
+    Dotfiles,
+    Filesystem,
 }
 
-impl From<&SyncDirectionGroup> for SyncDirection {
-    fn from(value: &SyncDirectionGroup) -> Self {
-        if value.from_dotfiles {
-            return Self::FromDotfiles;
-        } else if value.from_filesystem {
-            return Self::FromFilesystem;
-        } else {
-            unreachable!();
-        }
-    }
-}
-
+#[derive(Debug, ValueEnum, Clone)]
 pub(crate) enum FileType {
     Secret,
     Config,
-}
-
-impl From<&FileTypeGroup> for FileType {
-    fn from(value: &FileTypeGroup) -> Self {
-        if value.secret {
-            return Self::Secret;
-        } else if value.config {
-            return Self::Config;
-        } else {
-            unreachable!();
-        }
-    }
 }

@@ -58,9 +58,9 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
     let symlinks_cfg_path = dotfiles_dir.join("cfg").join("symlinks");
     let secrets_cfg_path = dotfiles_dir.join("cfg").join("secrets");
 
-    match PrimaryAction::from(&options.primary_action) {
+    match &options.primary_action {
         PrimaryAction::Sync => {
-            let sync_direction = SyncDirection::from(&options.sync_direction);
+            let sync_direction = &options.sync_direction;
             match File::open(&symlinks_cfg_path) {
                 Ok(symlinks_cfg_file) => {
                     let symlink_reader = BufReader::new(symlinks_cfg_file);
@@ -92,7 +92,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                         }
 
                         match sync_direction {
-                            SyncDirection::FromFilesystem => {
+                            SyncDirection::Dotfiles => {
                                 if file.is_symlink() {
                                     return Err(ApplicationError::UntrackedSymlinkedFile(
                                         file.clone(),
@@ -110,7 +110,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                     }
                                 })?;
                             }
-                            SyncDirection::FromDotfiles => {
+                            SyncDirection::Filesystem => {
                                 if file.exists() {
                                     let bkp_file = bkp_file(&file)?;
                                     std::fs::rename(&file, &bkp_file).map_err(|err| {
@@ -167,7 +167,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                     .0;
 
                                 match sync_direction {
-                                    SyncDirection::FromFilesystem => {
+                                    SyncDirection::Dotfiles => {
                                         let message = Message::new_literal(
                                             "none",
                                             fs::read_to_string(&file_path)
@@ -211,7 +211,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                                 )
                                             })?;
                                     }
-                                    SyncDirection::FromDotfiles => {
+                                    SyncDirection::Filesystem => {
                                         let dotfile = File::open(&dotfile_path).map_err(|err| {
                                             ApplicationError::CouldNotOpenFile(
                                                 dotfile_path.clone(),
@@ -280,7 +280,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         }
         PrimaryAction::Add => {
             // TODO: Implement fix for edge case where file already is added to configuration
-            let cfg_file_path = match FileType::from(&options.file_type) {
+            let cfg_file_path = match &options.file_type {
                 FileType::Config => symlinks_cfg_path,
                 FileType::Secret => secrets_cfg_path,
             };
@@ -334,7 +334,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
             }
         }
         PrimaryAction::Remove => {
-            let cfg_file_path = match FileType::from(&options.file_type) {
+            let cfg_file_path = match &options.file_type {
                 FileType::Config => symlinks_cfg_path,
                 FileType::Secret => secrets_cfg_path,
             };
