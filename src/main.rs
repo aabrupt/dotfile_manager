@@ -289,9 +289,13 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
             let abs_path_str = abs_path
                 .to_str()
                 .ok_or(ApplicationError::PathConversionError(abs_path.clone()))?;
-            let cfg_file_parent = cfg_file_path.parent().ok_or(ApplicationError::FileInRoot(cfg_file_path.clone()))?;
+            let cfg_file_parent = cfg_file_path
+                .parent()
+                .ok_or(ApplicationError::FileInRoot(cfg_file_path.clone()))?;
             if cfg_file_parent.exists() {
-                fs::create_dir_all(cfg_file_parent).map_err(|err| ApplicationError::CouldNotCreateDirectories(cfg_file_parent.to_path_buf(), err))?;
+                fs::create_dir_all(cfg_file_parent).map_err(|err| {
+                    ApplicationError::CouldNotCreateDirectories(cfg_file_parent.to_path_buf(), err)
+                })?;
             }
             {
                 let cfg_file = OpenOptions::new()
@@ -507,7 +511,7 @@ mod tests {
         let home = std::env::var("HOME").unwrap();
         let dotfile_path = dotfile_path(
             static_symlinc_dir(&home),
-            &[&home, ".config", "dotfolder"].iter().collect()
+            &[&home, ".config", "dotfolder"].iter().collect(),
         )
         .unwrap();
         assert_eq!(
@@ -522,7 +526,7 @@ mod tests {
         let home = std::env::var("HOME").unwrap();
         let dotfile_path = dotfile_path(
             static_symlinc_dir(&home),
-            &[&home, ".config", "dotfile"].iter().collect()
+            &[&home, ".config", "dotfile"].iter().collect(),
         )
         .unwrap();
         assert_eq!(
