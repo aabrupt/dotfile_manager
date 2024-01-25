@@ -30,7 +30,9 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         PathBuf::from(std::env::var("HOME").map_err(|_| ApplicationError::UndedfinedHomeVariable)?);
     let configuration_directories = [
         home_dir.join(".dotconf"),
+        home_dir.join(".dotfiles.conf"),
         home_dir.join(".config").join("dotconf"),
+        home_dir.join(".config").join("dotfiles.conf"),
     ];
     let mut config = Ini::new();
     for dir in configuration_directories {

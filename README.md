@@ -42,7 +42,9 @@ dotfiles -SFs /path/to/secret_key
 ### Using a configuration file
 There is two locations where you can store your configuration file:
 1. ~/.dotconf
-2. ~/.config/dotconf
+1. ~/.dotfiles.conf
+1. ~/.config/dotconf
+1. ~/.config/dotfiles.conf
 
 The syntax of the configuration file is similar to a desktop file or the windows `.ini` file. The file include a label and a key. Environment variables and other shell specific syntax is allowed. Syntax such as '~' or '$HOME'.
 
