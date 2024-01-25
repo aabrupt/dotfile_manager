@@ -32,8 +32,8 @@ pub(crate) enum ApplicationError {
     SecretKeyRequired,
     #[error("Failed signing key '{0}'")]
     PGPKeySignError(PathBuf),
-    #[error("Password is required")]
-    PasswordRequired,
+    #[error("Failed reading password from tty")]
+    FailedReadingPassword,
     #[error("Plain key generation failed with error '{0}'")]
     KeyGenerationFailed(pgp::errors::Error),
     #[error("An error has occured while expanding variables within a string '{0}'")]
@@ -60,4 +60,8 @@ pub(crate) enum ApplicationError {
     NoContentInPGPMessage,
     #[error("Content within decrypted message is not UTF8 encoded")]
     MessageNotUTF8Encoded,
+    #[error("Failed confirming creation of empty password")]
+    FailedConfirmingPasswordChoice,
+    #[error("Failed unlocking private key")]
+    FailedUnlockingPrivateKey,
 }

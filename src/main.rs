@@ -1,5 +1,6 @@
 use clap::Parser;
 use configparser::ini::Ini;
+use dialoguer::{Confirm, Password};
 use pgp::types::SecretKeyTrait;
 use pgp::{Deserializable, Message, SignedSecretKey};
 use rand::RngCore;
@@ -165,6 +166,16 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                         ApplicationError::FailedReadingKey(key_path.clone(), err)
                                     })?
                                     .0;
+
+                                let password = Password::new()
+                                    .with_prompt(
+                                        "Please input password corresponding to secret key",
+                                    )
+                                    .allow_empty_password(true)
+                                    .interact()
+                                    .map_err(|_| ApplicationError::FailedReadingPassword)?;
+
+                                key.unlock(|| password, |_| Ok(())).map_err(|_| ApplicationError::FailedUnlockingPrivateKey)?;
 
                                 match sync_direction {
                                     SyncDirection::FromFilesystem => {
@@ -388,17 +399,14 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         PrimaryAction::CreateKey => {
             let key_path = key_or_cfg(&options.secret_key, config)?;
 
-            let mut key_file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&key_path)
-                .map_err(|err| ApplicationError::CouldNotOpenFile(key_path.clone(), err))?;
+            let password = read_password_from_tty()?;
 
             let key_params = pgp::SecretKeyParamsBuilder::default()
                 .key_type(pgp::KeyType::Rsa(2048))
                 .primary_user_id("".to_string())
                 .can_create_certificates(false)
                 .can_sign(true)
+                .passphrase(password.clone())
                 .preferred_symmetric_algorithms(
                     vec![pgp::crypto::sym::SymmetricKeyAlgorithm::AES256].into(),
                 )
@@ -409,16 +417,21 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                 .build()
                 .unwrap();
 
-            /* let password =
-            rpassword::prompt_password("Please input a password to sign the PGP key\n> ")
-                .map_err(|_| ApplicationError::PasswordRequired)?; */
-
             let secret_key = key_params
                 .generate()
                 .map_err(|err| ApplicationError::KeyGenerationFailed(err))?;
             let signed_secret_key = secret_key
-                .sign(|| String::new())
+                .sign(|| match password {
+                    Some(password) => password,
+                    None => String::new(),
+                })
                 .map_err(|_| ApplicationError::PGPKeySignError(key_path.clone()))?;
+
+            let mut key_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&key_path)
+                .map_err(|err| ApplicationError::CouldNotOpenFile(key_path.clone(), err))?;
 
             signed_secret_key
                 .to_armored_writer(&mut key_file, None)
@@ -481,6 +494,27 @@ fn expand_variables_in_path(file: &PathBuf) -> Result<PathBuf, ApplicationError>
             .deref(),
     )
     .map_err(|_| ApplicationError::PathConversionError(file.clone()))?)
+}
+
+fn read_password_from_tty() -> Result<Option<String>, ApplicationError> {
+    let password = Password::new()
+        .with_prompt("Input password for your secret key")
+        .with_confirmation("Confirm password", "Passwords does not match")
+        .allow_empty_password(true)
+        .interact()
+        .map_err(|_| ApplicationError::FailedReadingPassword)?;
+    if password.is_empty() {
+        if !Confirm::new()
+            .with_prompt("Create secret key without password?")
+            .interact()
+            .map_err(|_| ApplicationError::FailedConfirmingPasswordChoice)?
+        {
+            return read_password_from_tty();
+        }
+        Ok(None)
+    } else {
+        Ok(Some(password))
+    }
 }
 
 #[cfg(test)]
