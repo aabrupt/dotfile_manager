@@ -384,6 +384,10 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         PrimaryAction::CreateKey => {
             let key_path = key_or_cfg(&options.secret_key, config)?;
 
+            let key_parent = key_path.parent().ok_or(ApplicationError::FileInRoot(key_path.clone()))?;
+
+            fs::create_dir_all(key_parent).map_err(|err| ApplicationError::CouldNotCreateDirectories(key_parent.to_path_buf(), err))?;
+
             let mut key_file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
