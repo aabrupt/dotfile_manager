@@ -32,8 +32,6 @@ pub(crate) enum ApplicationError {
     SecretKeyRequired,
     #[error("Failed signing key '{0}'")]
     PGPKeySignError(PathBuf),
-    #[error("Password is required")]
-    PasswordRequired,
     #[error("Plain key generation failed with error '{0}'")]
     KeyGenerationFailed(pgp::errors::Error),
     #[error("An error has occured while expanding variables within a string '{0}'")]
