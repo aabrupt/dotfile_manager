@@ -58,4 +58,6 @@ pub(crate) enum ApplicationError {
     NoContentInPGPMessage,
     #[error("Content within decrypted message is not UTF8 encoded")]
     MessageNotUTF8Encoded,
+    #[error("Failed checking if file exist")]
+    FailedCheckingExistanceOfFile(std::io::Error),
 }

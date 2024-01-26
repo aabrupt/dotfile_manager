@@ -36,7 +36,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
     ];
     let mut config = Ini::new();
     for dir in configuration_directories {
-        if !dir.exists() {
+        if !dir.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
             continue;
         }
 
@@ -78,7 +78,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                         let file = PathBuf::from(line);
                         let dotfile_path = dotfile_path(dotfiles_dir.join("symlinks"), &file)?;
                         if file.is_symlink() {
-                            if dotfile_path.exists() {
+                            if dotfile_path.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
                                 println!(
                                     "'{}' already tracked",
                                     file.into_os_string().into_string().unwrap()
@@ -87,7 +87,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                             }
                         }
 
-                        if !dotfile_path.parent().unwrap().exists() {
+                        if !dotfile_path.parent().unwrap().try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
                             std::fs::create_dir(dotfile_path.parent().unwrap()).map_err(|err| {
                                 ApplicationError::CouldNotCreateDirectories(
                                     dotfile_path.parent().unwrap().to_path_buf(),
@@ -103,7 +103,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                         file.clone(),
                                     ));
                                 }
-                                if !file.exists() {
+                                if !file.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
                                     eprintln!("{}", ApplicationError::FileNotFound(file));
                                     continue;
                                 }
@@ -116,7 +116,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                 })?;
                             }
                             SyncDirection::Filesystem => {
-                                if file.exists() {
+                                if file.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
                                     let bkp_file = bkp_file(&file)?;
                                     std::fs::rename(&file, &bkp_file).map_err(|err| {
                                         ApplicationError::FailedRenamingFile {
@@ -253,7 +253,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                             })?;
                                             if clear.len() > 0 {
                                                 let bkp_file = bkp_file(&file_path)?;
-                                                if file_path.exists() {
+                                                if file_path.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
                                                     fs::rename(&file_path, &bkp_file).map_err(
                                                         |err| {
                                                             ApplicationError::FailedRenamingFile {
@@ -294,9 +294,13 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
             let abs_path_str = abs_path
                 .to_str()
                 .ok_or(ApplicationError::PathConversionError(abs_path.clone()))?;
-            let cfg_file_parent = cfg_file_path.parent().ok_or(ApplicationError::FileInRoot(cfg_file_path.clone()))?;
-            if cfg_file_parent.exists() {
-                fs::create_dir_all(cfg_file_parent).map_err(|err| ApplicationError::CouldNotCreateDirectories(cfg_file_parent.to_path_buf(), err))?;
+            let cfg_file_parent = cfg_file_path
+                .parent()
+                .ok_or(ApplicationError::FileInRoot(cfg_file_path.clone()))?;
+            if cfg_file_parent.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
+                fs::create_dir_all(cfg_file_parent).map_err(|err| {
+                    ApplicationError::CouldNotCreateDirectories(cfg_file_parent.to_path_buf(), err)
+                })?;
             }
             {
                 let cfg_file = OpenOptions::new()
