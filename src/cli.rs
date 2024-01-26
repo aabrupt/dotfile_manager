@@ -24,6 +24,8 @@ pub(crate) struct Cli {
     /// PGP key which has different use cases depending on the function
     #[clap(short = 'k', long)]
     pub(crate) secret_key: Option<PathBuf>,
+    #[clap(long)]
+    pub(crate) source_control_directory: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

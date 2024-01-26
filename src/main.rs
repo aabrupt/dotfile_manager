@@ -46,13 +46,16 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         break;
     }
 
-    let dotfiles_dir = match config.get("options", "source_control_folder") {
-        Some(dotfiles_dir) => PathBuf::from(
-            shellexpand::full(&dotfiles_dir)
-                .map_err(|err| ApplicationError::ErrorExpandingVariable(err))?
-                .deref(),
-        ),
-        None => PathBuf::from(std::env::var("HOME").unwrap()).join(".dotfiles"),
+    let dotfiles_dir = match options.source_control_directory {
+        Some(directory) => directory,
+        None => match config.get("options", "source_control_folder") {
+            Some(dotfiles_dir) => PathBuf::from(
+                shellexpand::full(&dotfiles_dir)
+                    .map_err(|err| ApplicationError::ErrorExpandingVariable(err))?
+                    .deref(),
+            ),
+            None => PathBuf::from(std::env::var("HOME").unwrap()).join(".dotfiles"),
+        },
     };
 
     /* Get the configuration file containing simple line by line paths to directories and
