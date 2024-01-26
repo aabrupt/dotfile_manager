@@ -9,7 +9,7 @@ This is a simple manager for your dotfiles. The features are following:
 ## Installation
 This application is built in rust and is simply installed by a simple `cargo install --git`.
 ```bash
-cargo install --git **repository url here**
+cargo install --git https://github.com/aabrupt/dotfile_manager
 ```
 
 ## Usage
