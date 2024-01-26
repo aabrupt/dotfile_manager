@@ -8,7 +8,12 @@ pub(crate) struct Cli {
     /// The primary action for the application
     pub(crate) primary_action: PrimaryAction,
     /// Sync to specified location
-    #[clap(short='D', long, required=false, required_if_eq("primary_action", "sync"))]
+    #[clap(
+        short = 'D',
+        long,
+        required = false,
+        required_if_eq("primary_action", "sync")
+    )]
     pub(crate) sync_direction: SyncDirection,
     /// File type to be added into tracked files
     #[clap(short='F', long, required=false, required_if_eq_any=[("primary_action", "add"), ("primary_action", "remove")])]
@@ -17,7 +22,7 @@ pub(crate) struct Cli {
     #[clap(short = 'f', long, requires = "file_type", required_if_eq_any=[("primary_action", "add"), ("primary_action", "remove")])]
     pub(crate) file: Option<PathBuf>,
     /// PGP key which has different use cases depending on the function
-    #[clap(short = 'k', long = "secret-key")]
+    #[clap(short = 'k', long)]
     pub(crate) secret_key: Option<PathBuf>,
 }
 
