@@ -36,7 +36,10 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
     ];
     let mut config = Ini::new();
     for dir in configuration_directories {
-        if !dir.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
+        if !dir
+            .try_exists()
+            .map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))?
+        {
             continue;
         }
 
@@ -78,7 +81,9 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                         let file = PathBuf::from(line);
                         let dotfile_path = dotfile_path(dotfiles_dir.join("symlinks"), &file)?;
                         if file.is_symlink() {
-                            if dotfile_path.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
+                            if dotfile_path.try_exists().map_err(|err| {
+                                ApplicationError::FailedCheckingExistanceOfFile(err)
+                            })? {
                                 println!(
                                     "'{}' already tracked",
                                     file.into_os_string().into_string().unwrap()
@@ -87,14 +92,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                             }
                         }
 
-                        if !dotfile_path.parent().unwrap().try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
-                            std::fs::create_dir(dotfile_path.parent().unwrap()).map_err(|err| {
-                                ApplicationError::CouldNotCreateDirectories(
-                                    dotfile_path.parent().unwrap().to_path_buf(),
-                                    err,
-                                )
-                            })?;
-                        }
+                        create_missing_parents(&dotfile_path)?;
 
                         match sync_direction {
                             SyncDirection::Dotfiles => {
@@ -103,7 +101,9 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                         file.clone(),
                                     ));
                                 }
-                                if !file.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
+                                if !file.try_exists().map_err(|err| {
+                                    ApplicationError::FailedCheckingExistanceOfFile(err)
+                                })? {
                                     eprintln!("{}", ApplicationError::FileNotFound(file));
                                     continue;
                                 }
@@ -116,7 +116,9 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                 })?;
                             }
                             SyncDirection::Filesystem => {
-                                if file.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
+                                if file.try_exists().map_err(|err| {
+                                    ApplicationError::FailedCheckingExistanceOfFile(err)
+                                })? {
                                     let bkp_file = bkp_file(&file)?;
                                     std::fs::rename(&file, &bkp_file).map_err(|err| {
                                         ApplicationError::FailedRenamingFile {
@@ -253,7 +255,11 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                                             })?;
                                             if clear.len() > 0 {
                                                 let bkp_file = bkp_file(&file_path)?;
-                                                if file_path.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
+                                                if file_path.try_exists().map_err(|err| {
+                                                    ApplicationError::FailedCheckingExistanceOfFile(
+                                                        err,
+                                                    )
+                                                })? {
                                                     fs::rename(&file_path, &bkp_file).map_err(
                                                         |err| {
                                                             ApplicationError::FailedRenamingFile {
@@ -294,14 +300,9 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
             let abs_path_str = abs_path
                 .to_str()
                 .ok_or(ApplicationError::PathConversionError(abs_path.clone()))?;
-            let cfg_file_parent = cfg_file_path
-                .parent()
-                .ok_or(ApplicationError::FileInRoot(cfg_file_path.clone()))?;
-            if cfg_file_parent.try_exists().map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))? {
-                fs::create_dir_all(cfg_file_parent).map_err(|err| {
-                    ApplicationError::CouldNotCreateDirectories(cfg_file_parent.to_path_buf(), err)
-                })?;
-            }
+
+            create_missing_parents(&cfg_file_path)?;
+
             {
                 let cfg_file = OpenOptions::new()
                     .create(true)
@@ -393,9 +394,7 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
         PrimaryAction::CreateKey => {
             let key_path = key_or_cfg(&options.secret_key, config)?;
 
-            let key_parent = key_path.parent().ok_or(ApplicationError::FileInRoot(key_path.clone()))?;
-
-            fs::create_dir_all(key_parent).map_err(|err| ApplicationError::CouldNotCreateDirectories(key_parent.to_path_buf(), err))?;
+            create_missing_parents(&key_path)?;
 
             let mut key_file = OpenOptions::new()
                 .write(true)
@@ -434,6 +433,25 @@ pub(crate) fn inner_main() -> Result<(), ApplicationError> {
                 .map_err(|err| ApplicationError::PGPWriterError(key_path.clone(), err))?;
         }
     }
+    Ok(())
+}
+
+fn create_missing_parents(key_path: &PathBuf) -> Result<(), ApplicationError> {
+    let key_parent = key_path
+        .parent()
+        .ok_or(ApplicationError::FileInRoot(key_path.clone()))?;
+
+    if key_parent
+        .try_exists()
+        .map_err(|err| ApplicationError::FailedCheckingExistanceOfFile(err))?
+    {
+        return Ok(());
+    }
+
+    fs::create_dir_all(key_parent).map_err(|err| {
+        ApplicationError::CouldNotCreateDirectories(key_parent.to_path_buf(), err)
+    })?;
+
     Ok(())
 }
 
@@ -495,6 +513,7 @@ fn expand_variables_in_path(file: &PathBuf) -> Result<PathBuf, ApplicationError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_fs::TempDir;
 
     fn static_symlinc_dir<'a>(home: &'a str) -> PathBuf {
         [home.into(), ".dotfiles", "symlinks"].iter().collect()
@@ -520,7 +539,7 @@ mod tests {
         let home = std::env::var("HOME").unwrap();
         let dotfile_path = dotfile_path(
             static_symlinc_dir(&home),
-            &[&home, ".config", "dotfolder"].iter().collect()
+            &[&home, ".config", "dotfolder"].iter().collect(),
         )
         .unwrap();
         assert_eq!(
@@ -535,7 +554,7 @@ mod tests {
         let home = std::env::var("HOME").unwrap();
         let dotfile_path = dotfile_path(
             static_symlinc_dir(&home),
-            &[&home, ".config", "dotfile"].iter().collect()
+            &[&home, ".config", "dotfile"].iter().collect(),
         )
         .unwrap();
         assert_eq!(
@@ -587,5 +606,16 @@ mod tests {
 
         let input_key = key_or_cfg(&None, config).unwrap();
         assert_eq!(input_key, PathBuf::from(std::env::var("HOME").unwrap()));
+    }
+    #[test]
+    fn test_missing_parents() {
+        let tmp_dir = TempDir::new().unwrap();
+        let file_path = tmp_dir.join("parent").join("file");
+        create_missing_parents(&file_path).unwrap();
+        let parent = file_path.parent().unwrap();
+        assert!(parent.exists());
+        assert_eq!(parent.file_name().unwrap(), std::ffi::OsStr::new("parent"));
+
+        tmp_dir.close().unwrap();
     }
 }
