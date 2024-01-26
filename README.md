@@ -50,5 +50,5 @@ There is two locations where you can store your configuration file:
 The syntax of the configuration file is similar to a desktop file or the windows `.ini` file. The file include a label and a key. Environment variables and other shell specific syntax is allowed. Syntax such as '~' or '$HOME'.
 
 - Options
-    - source\_control\_dir : /path/to/source-control
+    - source\_control\_folder : /path/to/source-control
     - secret\_key : /path/to/pgp/secret-key
