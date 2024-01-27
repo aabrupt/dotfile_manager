@@ -455,6 +455,27 @@ fn create_missing_parents(key_path: &PathBuf) -> Result<(), ApplicationError> {
     Ok(())
 }
 
+/// Returns a path derived from a base directory and a file.
+///
+/// If the file is not placed within the users home directory, then the derived file is prepended by a folder
+/// matching the parent of the file input. Reducing the likeliness of two files having the same
+/// name and overwriting each other.
+///
+/// # Arguments
+///
+/// * `base_directory` - PathBuf holding path to root of derived path
+/// * `file` - PathBuf reference holding the location of the file to be derived
+///
+/// # Examples
+///
+/// ```
+/// // Directory located within the source control
+/// let symlinks_base = ["path", "to", "symlinks"].iter().collect::<PathBuf>();
+/// // File not located within home directory and not within the source control
+/// let real_file = ["path", "to", "real", "file"].iter().collect::<PathBuf>();
+/// let derived_path = dotfile_path(symlinks_base, &real_file).unwrap();
+/// assert_eq(derived_path, ["path", "to", "symlinks", "real", "file"].iter().collect::<PathBuf>());
+/// ```
 fn dotfile_path<'a>(
     mut base_directory: PathBuf,
     file: &'a PathBuf,
