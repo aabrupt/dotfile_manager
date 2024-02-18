@@ -1,0 +1,22 @@
+[package]
+name = "dotfile_manager"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.5.0", features = ["cargo", "derive"] }
+log = "0.4.20"
+path-clean = "1.0.1"
+shellexpand = { version = "3.1.0", features = ["path"] }
+strum = { version = "0.26.1", features = ["derive"] }
+thiserror = "1.0.57"
+
+[dependencies.simple_logger]
+version = "4.3.3"
+default-features = false
+features = ["colors", "stderr"]
+
+[dev-dependencies]
+assert_fs = "1.1.1"
