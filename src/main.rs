@@ -25,6 +25,14 @@ enum Error {
     IOError(#[from] std::io::Error),
     #[error("Unset home directory")]
     UnsetHomeDirectory,
+    #[error("Failed converting from OS specific resource: {0:?}")]
+    OSConversionError(std::ffi::OsString),
+}
+
+impl Error {
+    fn recover(self) {
+        error!("{}", self)
+    }
 }
 
 type Result<R> = std::result::Result<R, Error>;
@@ -55,7 +63,8 @@ fn main() {
         eprintln!("Failed initializing logger with error: {}", err);
     }
     if let Err(err) = _main() {
-        error!("{}", err)
+        error!("{}", err);
+        info!("Fatal error, quitting app");
     }
 }
 
@@ -68,23 +77,29 @@ fn _main() -> Result<()> {
                         .value_parser(
                             clap::builder::EnumValueParser::<Direction>::new(),
                         )
-                        .required(true),
+                        .required(true)
+                        .help("Provides a the location which should recieve the file update")
                 )
-                .aliases(["s"]),
+                .aliases(["s"])
+                .about("Sync files between the file system and source control"),
             Command::new("add")
                 .arg(
                     Arg::new("file")
                         .value_parser(clap::builder::PathBufValueParser::new())
-                        .required(true),
+                        .required(true)
+                        .help("Provides a file to be tracked within the source control"),
                 )
-                .aliases(["a"]),
+                .aliases(["a"])
+                .about("Add a file to source control tracking"),
             Command::new("remove")
                 .arg(
                     Arg::new("file")
                         .value_parser(clap::builder::PathBufValueParser::new())
-                        .required(true),
+                        .required(true)
+                        .help("Provides a file to stop being tracked within the source control"),
                 )
-                .aliases(["r"]),
+                .aliases(["r"])
+                .about("Remove file from source control tracking"),
         ])
         .subcommand_required(true)
         .get_matches();
@@ -164,7 +179,8 @@ fn _main() -> Result<()> {
 fn sync(direction: Direction) -> Result<()> {
     match direction {
         Direction::Filesystem => {
-            todo!("Sync files from filesystem")
+            info!("Syncing from filesystem");
+            let dotfile_dir = dotfiles_directory();
         }
         Direction::Dotfiles => todo!("Sync files from dotfiles"),
     };
@@ -179,9 +195,9 @@ fn add(file: PathBuf) -> Result<()> {
     let file = clean_path_to_store(file)?;
     info!("Adding file '{:?}'", file);
 
-    /* push_tracked_file(&file, &dotfiles_directory()?, TRACKING_FILE_NAME)?;
-        info!("File successfully tracked");
-    */
+    push_tracked_file(&file, &dotfiles_directory()?, TRACKING_FILE_NAME)?;
+    info!("File successfully tracked");
+
     Ok(())
 }
 
@@ -217,7 +233,7 @@ fn clean_path_to_store(mut path: PathBuf) -> Result<PathBuf> {
     path = path.clean();
     Ok(
         match path.strip_prefix(
-            std::env::var("HOME").map_err(|_| Error::UnsetHomeDirectory)?,
+            std::env::var_os("HOME").ok_or(Error::UnsetHomeDirectory)?,
         ) {
             Ok(path) => PathBuf::from("~").join(path),
             Err(_) => path,
@@ -232,14 +248,13 @@ fn try_expand_path(path: PathBuf) -> Result<PathBuf> {
     let exp_path = shellexpand::full(str_path)
         .map_err(|_| Error::FailedExpandingPath(path.clone()))?;
     let mut exp_path = PathBuf::from(exp_path.to_string());
-    if !exp_path.starts_with("/") {
-        exp_path = current_dir()?.join(exp_path);
-    }
     Ok(exp_path.clean())
 }
 
 fn relative_path(path: &PathBuf) -> Result<PathBuf> {
-    let home = PathBuf::from(std::env::var("HOME").unwrap());
+    let home = PathBuf::from(
+        std::env::var_os("HOME").ok_or(Error::UnsetHomeDirectory)?,
+    );
     let dotfile_dir = dotfiles_directory()?;
     Ok(match (path.parent(), path.file_name()) {
         (Some(parent), Some(name)) if parent == PathBuf::from("/") => {
@@ -277,7 +292,14 @@ fn push_tracked_file(
         .create(true)
         .open(dotfiles_directory.join(tracking_file))?;
 
-    file.write_all(path.as_os_str().as_bytes())?;
+    file.write_all(
+        format!(
+            "{}\n",
+            path.to_str()
+                .ok_or(Error::OSConversionError(path.as_os_str().to_owned()))?
+        )
+        .as_bytes(),
+    )?;
 
     Ok(())
 }
@@ -320,14 +342,13 @@ fn clear_tracked_files(
 mod tests {
     use std::{ffi::OsStr, fs::read_to_string};
 
-    use assert_fs::TempDir;
+    use tmp_env::{create_temp_dir, TmpDir};
 
     use super::*;
 
     #[test]
     fn test_relative_path() {
-        todo!("temp-env");
-        std::env::set_var(DIRECTORY_VARIABLE_NAME, "/");
+        let _tmp_env = tmp_env::set_var(DIRECTORY_VARIABLE_NAME, "/");
         let path = PathBuf::from(PathBuf::from("/hello/world"));
         let relative_path = relative_path(&path).unwrap();
 
@@ -336,9 +357,8 @@ mod tests {
 
     #[test]
     fn test_relative_path_from_home() {
-        todo!("temp-env");
-        std::env::set_var(DIRECTORY_VARIABLE_NAME, "/");
-        std::env::set_var("HOME", "/hello");
+        let _tmp_env = tmp_env::set_var(DIRECTORY_VARIABLE_NAME, "/");
+        let _tmp_home = tmp_env::set_var("HOME", "/hello");
         let path = PathBuf::from(PathBuf::from("/hello/world"));
         let relative_path = relative_path(&path).unwrap();
 
@@ -347,8 +367,7 @@ mod tests {
 
     #[test]
     fn test_relative_path_from_root() {
-        todo!("temp-env");
-        std::env::set_var(DIRECTORY_VARIABLE_NAME, "/");
+        let _tmp_env = tmp_env::set_var(DIRECTORY_VARIABLE_NAME, "/");
         let path = PathBuf::from(PathBuf::from("/world"));
         let relative_path = relative_path(&path).unwrap();
 
@@ -356,14 +375,17 @@ mod tests {
     }
 
     #[test]
-    fn test_tracking_push_read_remove() {
-        let tmp = TempDir::new().unwrap();
+    fn test_tracking_push_read_remove_clear() {
+        let tmp = create_temp_dir().unwrap();
 
         let dotfiles_directory = &tmp.to_path_buf();
 
         let path = ["file.txt"].into_iter().collect::<PathBuf>();
+        let path2 = ["file2.txt"].into_iter().collect::<PathBuf>();
 
         push_tracked_file(&path, dotfiles_directory, TRACKING_FILE_NAME)
+            .unwrap();
+        push_tracked_file(&path2, dotfiles_directory, TRACKING_FILE_NAME)
             .unwrap();
 
         let buf = read_to_string(dotfiles_directory.join(TRACKING_FILE_NAME))
@@ -380,7 +402,13 @@ mod tests {
 
         let buf =
             list_tracked_files(dotfiles_directory, TRACKING_FILE_NAME).unwrap();
-        assert!(buf.len() == 0);
+        assert_eq!(buf.len(), 1);
+
+        clear_tracked_files(dotfiles_directory, TRACKING_FILE_NAME).unwrap();
+
+        let buf =
+            list_tracked_files(dotfiles_directory, TRACKING_FILE_NAME).unwrap();
+        assert_eq!(buf.len(), 0)
     }
 
     #[test]
@@ -398,5 +426,18 @@ mod tests {
         let path = PathBuf::from("path");
         let path = clean_path_to_store(path).unwrap();
         assert_eq!(path, current_dir().unwrap().join("path"));
+    }
+
+    #[test]
+    fn test_try_expand_path() {
+        let path = "~";
+        let path = try_expand_path(path.into()).unwrap();
+
+        assert_eq!(path, std::env::var_os("HOME").unwrap());
+
+        let path = "$HOME";
+        let path = try_expand_path(path.into()).unwrap();
+
+        assert_eq!(path, std::env::var_os("HOME").unwrap());
     }
 }

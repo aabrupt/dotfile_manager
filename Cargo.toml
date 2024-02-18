@@ -19,4 +19,4 @@ default-features = false
 features = ["colors", "stderr"]
 
 [dev-dependencies]
-assert_fs = "1.1.1"
+tmp_env = "0.1.1"
