@@ -1,4 +1,3 @@
-use clap::{command, Arg, Command, ValueEnum};
 use log::{error, info};
 use path_clean::PathClean;
 use simple_logger::SimpleLogger;
@@ -6,12 +5,12 @@ use std::{
     env::current_dir,
     fs::{self, read_to_string, OpenOptions},
     io::Write,
-    ops::Deref,
-    os::unix::ffi::OsStrExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
-use strum::EnumString;
-use strum::IntoStaticStr;
+
+mod cli;
+
+use cli::Direction;
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
@@ -21,12 +20,16 @@ enum Error {
     FailedRetrievingFileMetadata(PathBuf),
     #[error("Failed expanding path: {0}")]
     FailedExpandingPath(PathBuf),
-    #[error("IO error occurred: {0}")]
+    #[error(transparent)]
     IOError(#[from] std::io::Error),
     #[error("Unset home directory")]
     UnsetHomeDirectory,
     #[error("Failed converting from OS specific resource: {0:?}")]
     OSConversionError(std::ffi::OsString),
+    #[error("Invalid subcommand passed to application")]
+    InvalidSubcommand,
+    #[error("Invalid argument passed to application: {0}")]
+    InvalidArgument(&'static str),
 }
 
 impl Error {
@@ -36,21 +39,6 @@ impl Error {
 }
 
 type Result<R> = std::result::Result<R, Error>;
-
-#[derive(Clone, ValueEnum)]
-enum Direction {
-    #[clap(alias = "f")]
-    Filesystem,
-    #[clap(alias = "d")]
-    Dotfiles,
-}
-
-#[derive(Debug, EnumString, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-enum ChangeAction {
-    Delete,
-    Add,
-}
 
 const DIRECTORY_VARIABLE_NAME: &'static str = "DOTFILES_DIRECTORY";
 const TRACKING_FILE_NAME: &'static str = ".tracking";
@@ -64,57 +52,38 @@ fn main() {
     }
     if let Err(err) = _main() {
         error!("{}", err);
-        info!("Fatal error, quitting app");
+        info!("Fatal error, performing cleanup...");
     }
 }
 
 fn _main() -> Result<()> {
-    let matches = command!()
-        .subcommands([
-            Command::new("sync")
-                .arg(
-                    Arg::new("direction")
-                        .value_parser(
-                            clap::builder::EnumValueParser::<Direction>::new(),
-                        )
-                        .required(true)
-                        .help("Provides a the location which should recieve the file update")
-                )
-                .aliases(["s"])
-                .about("Sync files between the file system and source control"),
-            Command::new("add")
-                .arg(
-                    Arg::new("file")
-                        .value_parser(clap::builder::PathBufValueParser::new())
-                        .required(true)
-                        .help("Provides a file to be tracked within the source control"),
-                )
-                .aliases(["a"])
-                .about("Add a file to source control tracking"),
-            Command::new("remove")
-                .arg(
-                    Arg::new("file")
-                        .value_parser(clap::builder::PathBufValueParser::new())
-                        .required(true)
-                        .help("Provides a file to stop being tracked within the source control"),
-                )
-                .aliases(["r"])
-                .about("Remove file from source control tracking"),
-        ])
-        .subcommand_required(true)
-        .get_matches();
+    let arg_matches = cli::parse_args();
 
-    match matches.subcommand().unwrap() {
+    match arg_matches.subcommand().ok_or(Error::InvalidSubcommand)? {
         ("sync", args) => {
-            sync(args.get_one::<Direction>("direction").unwrap().to_owned())
+            let arg = "direction";
+            sync(
+                args.get_one::<Direction>(arg)
+                    .ok_or(Error::InvalidArgument(arg))?
+                    .to_owned(),
+            )
         }
         ("add", args) => {
-            add(args.get_one::<PathBuf>("file").unwrap().to_owned())
+            let arg = "file";
+            add(args
+                .get_one::<PathBuf>(arg)
+                .ok_or(Error::InvalidArgument(arg))?
+                .to_owned())
         }
         ("remove", args) => {
-            remove(args.get_one::<PathBuf>("file").unwrap().to_owned())
+            let arg = "file";
+            remove(
+                args.get_one::<PathBuf>(arg)
+                    .ok_or(Error::InvalidArgument(arg))?
+                    .to_owned(),
+            )
         }
-        _ => unreachable!(),
+        _ => Err(Error::InvalidSubcommand),
     }?;
 
     Ok(())
