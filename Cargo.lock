@@ -163,6 +163,7 @@ dependencies = [
  "clap",
  "log",
  "path-clean",
+ "rand",
  "shellexpand",
  "simple_logger",
  "thiserror",

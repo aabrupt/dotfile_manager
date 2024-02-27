@@ -9,6 +9,7 @@ edition = "2021"
 clap = { version = "4.5.0", features = ["cargo", "derive"] }
 log = "0.4.20"
 path-clean = "1.0.1"
+rand = "0.8.5"
 shellexpand = { version = "3.1.0", features = ["path"] }
 thiserror = "1.0.57"
 

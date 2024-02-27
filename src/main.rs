@@ -5,7 +5,10 @@ use std::{
     env::current_dir,
     fs::{self, read_to_string, OpenOptions},
     io::Write,
+    iter::Map,
     path::PathBuf,
+    rc::Rc,
+    sync::Mutex,
 };
 
 mod cli;
@@ -14,8 +17,8 @@ use cli::Direction;
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
-    #[error("Variable '{0}' is unset.\nPlease set it in the configuration file for your shell.")]
-    UnsetDirectoryVariable(&'static str),
+    #[error("Variable '{0}' is unset")]
+    UnsetVariable(&'static str),
     #[error("Failed retrieving metadata from file: {0}")]
     FailedRetrievingFileMetadata(PathBuf),
     #[error("Failed expanding path: {0}")]
@@ -40,9 +43,30 @@ impl Error {
 
 type Result<R> = std::result::Result<R, Error>;
 
-const DIRECTORY_VARIABLE_NAME: &'static str = "DOTFILES_DIRECTORY";
-const TRACKING_FILE_NAME: &'static str = ".tracking";
-const REMOVED_FILE_NAME: &'static str = ".deleted";
+struct ChangeStack<'a>(Vec<&'a dyn Change>);
+
+impl ChangeStack<'_> {
+    pub fn push(&mut self, change: impl Change) {
+        self.0.push(&change);
+    }
+
+    fn pop(&mut self) -> Option<&dyn Change> {
+        self.0.pop()
+    }
+
+    fn revert(self) -> Result<()> {
+        self.0.into_iter().map(|change| change.revert()).collect()
+    }
+}
+
+trait Change: std::fmt::Display {
+    fn revert(self) -> Result<()>;
+}
+
+const CHANGES: Mutex<ChangeStack> = Mutex::new(ChangeStack(Vec::new()));
+const DIRECTORY_VARIABLE_NAME: &str = "DOTFILES_DIRECTORY";
+const TRACKING_FILE_NAME: &str = ".tracking";
+const REMOVED_FILE_NAME: &str = ".deleted";
 
 fn main() {
     let logger = SimpleLogger::new();
@@ -146,12 +170,119 @@ fn _main() -> Result<()> {
 /// source control directory defined in an environment variable which name is
 /// described within the DIRECTORY_VARIABLE_NAME constant. Move those files to.
 fn sync(direction: Direction) -> Result<()> {
+    let dotfiles_directory = dotfiles_directory()?;
+
+    let files = list_tracked_files(&dotfiles_directory, TRACKING_FILE_NAME)?;
+
     match direction {
         Direction::Filesystem => {
             info!("Syncing from filesystem");
-            let dotfile_dir = dotfiles_directory();
+            files.into_iter().for_each(|file| {
+                info!("Currently working on '{:?}'", file);
+
+                let expanded = match try_expand_path(file) {
+                    Ok(val) => val,
+                    Err(err) => {
+                        err.recover();
+                        return;
+                    }
+                };
+
+                info!("'{:?}' expanded to path '{:?}'", file, expanded);
+
+                if !match expanded.try_exists() {
+                    Ok(exist) => exist,
+                    Err(err) => {
+                        Error::from(err).recover();
+                        return;
+                    }
+                } {
+                    error!("File, '{:?}', does not exist", expanded);
+                    return;
+                }
+
+                let relative = match relative_path(&expanded) {
+                    Ok(val) => val,
+                    Err(err) => {
+                        Error::from(err).recover();
+                        return;
+                    }
+                };
+                let relative = dotfiles_directory.join(relative);
+
+                let res = fs::rename(&expanded, &relative).err();
+                if let Some(err) = res {
+                    Error::from(err).recover();
+                    return;
+                }
+                let res =
+                    std::os::unix::fs::symlink(&relative, &expanded).err();
+                if let Some(err) = res {
+                    Error::from(err).recover();
+
+                    info!("Rolling back changes...");
+
+                    let res = fs::rename(&relative, &expanded).err();
+                    if let Some(err) = res {
+                        Error::from(err).recover();
+
+                        error!("Failed rolling back changes!");
+                    }
+
+                    return;
+                }
+
+                info!("'{:?}' successfully synced", expanded);
+            })
         }
-        Direction::Dotfiles => todo!("Sync files from dotfiles"),
+        Direction::Dotfiles => {
+            info!("Syncing from source control");
+
+            files.into_iter().for_each(|file| {
+                info!("Currently working on '{:?}'", file);
+
+                let expanded = match try_expand_path(file) {
+                    Ok(val) => val,
+                    Err(err) => {
+                        err.recover();
+                        return;
+                    }
+                };
+
+                info!("'{:?}' expanded to path '{:?}'", file, expanded);
+
+                let relative = match relative_path(&expanded) {
+                    Ok(val) => val,
+                    Err(err) => {
+                        Error::from(err).recover();
+                        return;
+                    }
+                };
+                let relative = dotfiles_directory.join(relative);
+
+                if !match relative.try_exists() {
+                    Ok(exist) => exist,
+                    Err(err) => {
+                        Error::from(err).recover();
+                        return;
+                    }
+                } {
+                    error!("Source control file, '{:?}', does not exist", expanded);
+                    return;
+                }
+
+                if match expanded.try_exists() {
+                    Ok(exist) => exist,
+                    Err(err) => {
+                        Error::from(err).recover();
+                        return;
+                    },
+                } {
+                    /* let bkp_expanded =
+                    info!("'{:?}' already exist, backing up to '{:?}' and replacing", */
+                }
+            });
+        }
     };
 
     todo!("Cleanup");
@@ -188,11 +319,10 @@ fn remove(file: PathBuf) -> Result<()> {
 }
 
 fn dotfiles_directory() -> Result<PathBuf> {
-    Ok(PathBuf::from(
-        std::env::var(DIRECTORY_VARIABLE_NAME).map_err(|_| {
-            Error::UnsetDirectoryVariable(DIRECTORY_VARIABLE_NAME)
-        })?,
-    ))
+    let env = std::env::var(DIRECTORY_VARIABLE_NAME)
+        .map_err(|_| Error::UnsetVariable(DIRECTORY_VARIABLE_NAME))?;
+    info!("Using source control: '{}'", env);
+    Ok(PathBuf::from(env))
 }
 
 fn clean_path_to_store(mut path: PathBuf) -> Result<PathBuf> {
@@ -210,13 +340,13 @@ fn clean_path_to_store(mut path: PathBuf) -> Result<PathBuf> {
     )
 }
 
-fn try_expand_path(path: PathBuf) -> Result<PathBuf> {
+fn try_expand_path(path: &PathBuf) -> Result<PathBuf> {
     let str_path = path
         .to_str()
         .ok_or(Error::FailedExpandingPath(path.clone()))?;
     let exp_path = shellexpand::full(str_path)
         .map_err(|_| Error::FailedExpandingPath(path.clone()))?;
-    let mut exp_path = PathBuf::from(exp_path.to_string());
+    let exp_path = PathBuf::from(exp_path.to_string());
     Ok(exp_path.clean())
 }
 
@@ -242,13 +372,10 @@ fn relative_path(path: &PathBuf) -> Result<PathBuf> {
 fn list_tracked_files(
     dotfiles_directory: &PathBuf,
     tracking_file: &'static str,
-) -> Result<Vec<PathBuf>> {
+) -> Result<Rc<[PathBuf]>> {
     let str = read_to_string(dotfiles_directory.join(tracking_file))?;
 
-    Ok(str
-        .lines()
-        .map(|line| PathBuf::from(line))
-        .collect::<Vec<PathBuf>>())
+    Ok(str.lines().map(|line| PathBuf::from(line)).collect())
 }
 
 fn push_tracked_file(
@@ -307,11 +434,20 @@ fn clear_tracked_files(
     Ok(())
 }
 
+fn backup_file_path(file: impl Into<PathBuf>) -> Option<PathBuf> {
+    let mut file: PathBuf = file.into();
+    let filename = file.file_name()?.to_str()?;
+    let random = rand::random::<i32>();
+    let filename = format!("{}.bpk-{}", filename, random);
+    file.set_file_name(filename);
+    Some(file)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{ffi::OsStr, fs::read_to_string};
 
-    use tmp_env::{create_temp_dir, TmpDir};
+    use tmp_env::create_temp_dir;
 
     use super::*;
 
@@ -400,13 +536,17 @@ mod tests {
     #[test]
     fn test_try_expand_path() {
         let path = "~";
-        let path = try_expand_path(path.into()).unwrap();
+        let path = try_expand_path(&path.into()).unwrap();
 
         assert_eq!(path, std::env::var_os("HOME").unwrap());
 
         let path = "$HOME";
-        let path = try_expand_path(path.into()).unwrap();
+        let path = try_expand_path(&path.into()).unwrap();
 
         assert_eq!(path, std::env::var_os("HOME").unwrap());
+    }
+
+    #[test]
+    fn test_bkp_filename() {
     }
 }
